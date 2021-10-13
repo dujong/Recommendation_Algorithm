@@ -118,7 +118,7 @@ def k_means(df):
 
 # by 종두 
 user_movie_dict = dict()
-user_movie_keyword = dict()
+# user_movie_keyword = dict()
 keyword = dict()
 
 
@@ -139,32 +139,79 @@ def interesting_Movie(movie_ratings_pivot_T, user_movie_dict):
 user_movie_dict = interesting_Movie(movie_ratings_pivot_T, user_movie_dict)
 
 movies = movies.reset_index(drop=True)
-keyword = get_keyword_df(movies[:10], keyword)
-
-df = pd.DataFrame(keyword)
-df.fillna(0, inplace=True)
-
-similarity = pearson_sim(df)
+keyword = pd.DataFrame(get_keyword_df(movies[:10], keyword))
+keyword.fillna(0, inplace=True)
+similarity = pearson_sim(keyword)
+pear_sim = pearson_sim(keyword)
 
 def average_ratings(recom_user_name, movie_ratings_pivot):
     average = movie_ratings_pivot[movie_ratings_pivot[recom_user_name] > 0][recom_user_name]
     average = sum(average) / len(average)
     return average
 
-def contents_pred_rating(movie_ratings_pivot_T):
-    CHAEYOOE_average = movie_ratings_pivot[movie_ratings_pivot['CHAEYOOE'] > 0]['CHAEYOOE']
-    CHAEYOOE_average = sum(average_ratings) / len(average_ratings)
+def contents_pred_rating(recom_user_name, movie_ratings_pivot, movie_ratings_pivot_T):
+    avg_rating = average_ratings(recom_user_name, movie_ratings_pivot)
 
-def collabor_pred_rating(recom_user_name, movie_ratings_pivot, movie_ratings_pivot_T, similarity):
-    for i in movie_ratings_pivot_T.index:
-        #avg_rating = 사용자 i의 평균 평점
-        avg_rating = average_ratings(recom_user_name, movie_ratings_pivot)
+
+
+def sim_user_list(recom_user_name, pear_sim):
+    sim_user = pd.DataFrame()
+    sim_user['user'] = pear_sim[recom_user_name].index #sorted(pear_sim['CHAEYOOE'], reverse=True)
+    sim_user['rating'] = pear_sim[recom_user_name].values
+    sim_user = sim_user.sort_values(by='rating', ascending=False)[1:11].reset_index(drop=True)
+    return sim_user
+
+def collabor_pred_rating(recom_user_name, similarity_movie, pear_sim ,movie_ratings_pivot, movie_ratings_pivot_T):
+    sim_user = sim_user_list(recom_user_name, pear_sim)
+    pred_ratings = dict()
+    #avg_rating = 사용자 i의 평균 평점
+    avg_rating = average_ratings(recom_user_name, movie_ratings_pivot)
+    
+    for i in movie_ratings_pivot.index:
         #middle_rating = 사용자 보정 평점
-        middle_rating = np.dot(movie_ratings_pivot, similarity)
+        sigma_value = 0
+        for j in sim_user:
+            if movie_ratings_pivot.loc[i, j] > 0:
+                continue
 
-    #CHAEYOOE_average = movie_ratings_pivot[movie_ratings_pivot['CHAEYOOE'] > 0]['CHAEYOOE']
-    #CHAEYOOE_average = sum(average) / len(average)
+            sim_uv = pear_sim.loc[recom_user_name,j]
+            sigma_value = sigma_value + (sim_uv * (movie_ratings_pivot.loc[i,j] - average_ratings(j, movie_ratings_pivot))) / np.abs(sim_uv)
+        pred_ratings[i] = avg_rating + sigma_value
+    
+    return pd.DataFrame([pred_ratings])
 
+
+def recommend_movie_contents(recom_user_name, similarity):
+    interest_movie = user_movie_dict[recom_user_name]
+    recomm_movie_result = []
+
+    for i in interest_movie:
+        recomm_movie_result.append(similarity[i].sort_values(ascending=False).index[1])
+    
+    return recomm_movie_result
+
+def recommend_movie_collabor(recom_user_name, pear_sim, similarity):
+    recomm_movie_result = []
+
+    sim_user = sim_user_list(recom_user_name, pear_sim)
+
+    for i in sim_user['user']:
+        #print(index,'번째:',user_movie_dict[i])
+        movie_list = user_movie_dict[i]
+        for j in movie_list:
+            first = similarity[j].sort_values(ascending=False).index[1]
+            recomm_movie_result.append(first)
+
+    print(recommend_movie_contents(recom_user_name, similarity))
+    
+    return recomm_movie_result
+
+
+
+recom_user_name = 'CHAEYOOE' #input()
+
+# 10.13 issue
+# @@@recommend_movie_contents, recommend_movie_collabor 영화 갯수 지정 후 추천!!!!!!!
 
 # recom_user_name = 'CHAEYOOE'
 
@@ -188,19 +235,19 @@ def collabor_pred_rating(recom_user_name, movie_ratings_pivot, movie_ratings_piv
 
 # first['sim_user_rating'] = avg
 
-movie_ratings_pivot_t = movie_ratings_pivot.T
-movie_ratings_pivot_t
+# movie_ratings_pivot_t = movie_ratings_pivot.T
+# movie_ratings_pivot_t
 
-sim_user = movie_ratings_pivot_t[movie_ratings_pivot_t['유전'] > 0].index
-pred = []
-for i in sim_user:
-    sim = pearson_sim.loc['CHAEYOOE', i]
-    sco = movie_ratings_pivot_t.loc[i, '유전']
-    aver = average(i)
-    pred.append(sim*(sco-aver)/ sim)
-middle_result = np.mean(pred)
+# sim_user = movie_ratings_pivot_t[movie_ratings_pivot_t['유전'] > 0].index
+# pred = []
+# for i in sim_user:
+#     sim = pearson_sim.loc['CHAEYOOE', i]
+#     sco = movie_ratings_pivot_t.loc[i, '유전']
+#     aver = average(i)
+#     pred.append(sim*(sco-aver)/ sim)
+# middle_result = np.mean(pred)
 
-CHAEYOOE_average = movie_ratings_pivot[movie_ratings_pivot['CHAEYOOE'] > 0]['CHAEYOOE']
-CHAEYOOE_average = sum(CHAEYOOE_average) / len(CHAEYOOE_average)
+# CHAEYOOE_average = movie_ratings_pivot[movie_ratings_pivot['CHAEYOOE'] > 0]['CHAEYOOE']
+# CHAEYOOE_average = sum(CHAEYOOE_average) / len(CHAEYOOE_average)
 
-CHAEYOOE_average + middle_result
+# CHAEYOOE_average + middle_result
