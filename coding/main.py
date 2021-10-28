@@ -6,6 +6,7 @@ from math import log
 from konlpy.tag import Kkma
 import os
 
+#by 종두 tfidf 수식
 def f(t, d):
     return d.count(t)
 
@@ -32,35 +33,6 @@ def tfidfScorer(D):
         result.append([(t, tfidf(t, d, tokenized_D)) for t in d])
     return result
 
-
-# dict 형태로 movie - keyword dict 저장해놓기
-def get_keyword_df(hos, keyword):
-    for i, doc in enumerate(tfidfScorer(hos['contents'])):
-        print('document:{}'.format(i))
-        doc = pd.DataFrame(doc, columns=['word', 'score'])
-        doc = keyword_extraction(doc)
-        ret = dict((word,score) for word, score in zip(doc.word, doc.score))
-        title = hos.loc[i, 'title']
-        keyword[title] = ret
-    return keyword
-
-def keyword_extraction(doc):
-    kkma = Kkma()
-    cnt = 0
-    for i in doc['word']:
-        try:
-            NN = kkma.nouns(i)[0]
-            if len(str(NN)) < 2:
-                continue
-            doc.loc[cnt, 'word'] = NN
-        except IndexError:
-            doc.drop(index=cnt, axis=0, inplace=True)
-        cnt += 1
-    doc = doc.reset_index(drop=True);
-    doc = doc.sort_values(by='score', ascending=False)[:3]
-    return doc
-
-
 def data_load(file_path):
     return pd.read_csv(file_path)
 
@@ -80,7 +52,7 @@ def preprocessing(movies, ratings):
 # by 종두 유사 사용자 추출
 movie_ratings, movie_ratings_pivot, movie_ratings_pivot_T = preprocessing(movies, ratings)
 
-
+# by 종두 pearson 유사도 추출
 def pearson_sim(df):
     return df.corr(method='pearson')
 
@@ -90,6 +62,8 @@ from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 import seaborn as sns
+
+# by 종두 K-means로 유사 사용자 추출
 def k_means(df):
     # K-Means
     tsne = TSNE(n_components=2, perplexity=10, learning_rate=100).fit_transform(movie_ratings_pivot_T)
@@ -116,12 +90,13 @@ def k_means(df):
     return result_by_sklearn
 
 
-# by 종두 
+# by 종두 key : user, value : user의 평균 rating을 넘는 movies
 user_movie_dict = dict()
-# user_movie_keyword = dict()
+
+# by 종두 key : movie, value : movie의 Top keyword
 keyword = dict()
 
-
+# by 종두 user들의 평균 rating을 넘는 영화들을 추출하는 함수
 def interesting_Movie(movie_ratings_pivot_T, user_movie_dict):
     for i in movie_ratings_pivot_T.index:
         movie_list = []
@@ -136,7 +111,35 @@ def interesting_Movie(movie_ratings_pivot_T, user_movie_dict):
 
     return user_movie_dict
 
+
 user_movie_dict = interesting_Movie(movie_ratings_pivot_T, user_movie_dict)
+
+# by 종두 keyword 추출
+def get_keyword_df(hos, keyword):
+    for i, doc in enumerate(tfidfScorer(hos['contents'])):
+        print('document:{}'.format(i))
+        doc = pd.DataFrame(doc, columns=['word', 'score'])
+        doc = keyword_extraction(doc)
+        ret = dict((word,score) for word, score in zip(doc.word, doc.score))
+        title = hos.loc[i, 'title']
+        keyword[title] = ret
+    return keyword
+
+def keyword_extraction(doc):
+    kkma = Kkma()
+    cnt = 0
+    for i in doc['word']:
+        try:
+            NN = kkma.nouns(i)[0]
+            if len(str(NN)) < 2:
+                continue
+            doc.loc[cnt, 'word'] = NN
+        except IndexError:
+            doc.drop(index=cnt, axis=0, inplace=True)
+        cnt += 1
+    doc = doc.reset_index(drop=True);
+    doc = doc.sort_values(by='score', ascending=False)[:3]
+    return doc
 
 movies = movies.reset_index(drop=True)
 keyword = pd.DataFrame(get_keyword_df(movies[:10], keyword))
@@ -144,16 +147,19 @@ keyword.fillna(0, inplace=True)
 similarity = pearson_sim(keyword)
 pear_sim = pearson_sim(keyword)
 
+# by 종두 특정 user의 평균 rating
 def average_ratings(recom_user_name, movie_ratings_pivot):
     average = movie_ratings_pivot[movie_ratings_pivot[recom_user_name] > 0][recom_user_name]
     average = sum(average) / len(average)
     return average
 
+
 def contents_pred_rating(recom_user_name, movie_ratings_pivot, movie_ratings_pivot_T):
     avg_rating = average_ratings(recom_user_name, movie_ratings_pivot)
+    
+    # 콘텐츠 수식 만들기 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
-
-
+# by 종두 유사 사용자 추출
 def sim_user_list(recom_user_name, pear_sim):
     sim_user = pd.DataFrame()
     sim_user['user'] = pear_sim[recom_user_name].index #sorted(pear_sim['CHAEYOOE'], reverse=True)
@@ -161,6 +167,7 @@ def sim_user_list(recom_user_name, pear_sim):
     sim_user = sim_user.sort_values(by='rating', ascending=False)[1:11].reset_index(drop=True)
     return sim_user
 
+# by 종두 협업필터링 예측 평점
 def collabor_pred_rating(recom_user_name, similarity_movie, pear_sim ,movie_ratings_pivot, movie_ratings_pivot_T):
     sim_user = sim_user_list(recom_user_name, pear_sim)
     pred_ratings = dict()
@@ -181,6 +188,7 @@ def collabor_pred_rating(recom_user_name, similarity_movie, pear_sim ,movie_rati
     return pd.DataFrame([pred_ratings])
 
 
+# by 종두 콘텐츠 기반 추천
 def recommend_movie_contents(recom_user_name, similarity):
     interest_movie = user_movie_dict[recom_user_name]
     recomm_movie_result = []
@@ -190,6 +198,7 @@ def recommend_movie_contents(recom_user_name, similarity):
     
     return recomm_movie_result
 
+# by 종두 협업필터링 기반 추천
 def recommend_movie_collabor(recom_user_name, pear_sim, similarity):
     recomm_movie_result = []
 
@@ -207,7 +216,7 @@ def recommend_movie_collabor(recom_user_name, pear_sim, similarity):
     return recomm_movie_result
 
 
-
+# by 종두 user input
 recom_user_name = 'CHAEYOOE' #input()
 
 # 10.13 issue
