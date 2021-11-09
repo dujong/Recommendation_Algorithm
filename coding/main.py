@@ -138,14 +138,105 @@ def keyword_extraction(doc):
             doc.drop(index=cnt, axis=0, inplace=True)
         cnt += 1
     doc = doc.reset_index(drop=True);
-    doc = doc.sort_values(by='score', ascending=False)[:3]
+    doc = doc.sort_values(by='score', ascending=False)[:5]
     return doc
 
 movies = movies.reset_index(drop=True)
 keyword = pd.DataFrame(get_keyword_df(movies[:10], keyword))
 keyword.fillna(0, inplace=True)
-similarity = pearson_sim(keyword)
-pear_sim = pearson_sim(keyword)
+similarity_movie = keyword.corr(method='pearson')
+similarity_movie
+
+# by 종두 콘텐츠 기반 추천
+def recommend_movie_contents(recom_user_name, similarity_movie):
+    interest_movie = user_movie_dict[recom_user_name]
+    recomm_movie_result = []
+
+    for i in interest_movie:
+        recomm_movie_result.append(similarity_movie[i].sort_values(ascending=False).index[1])
+    
+    return recomm_movie_result
+
+# by 종두 유사 사용자 추출
+def sim_user_list(recom_user_name, pear_sim):
+    sim_user = pd.DataFrame()
+    sim_user['user'] = pear_sim[recom_user_name].index #sorted(pear_sim['CHAEYOOE'], reverse=True)
+    sim_user['rating'] = pear_sim[recom_user_name].values
+    sim_user = sim_user.sort_values(by='rating', ascending=False)[1:11].reset_index(drop=True)
+    return sim_user
+
+# by 종두 협업필터링 예측 평점
+def collabor_pred_rating(recom_user_name, sim_user , sim_user_list, recomm_movie_result, movie_ratings_pivot):
+          
+    pred_ratings = dict()
+    #avg_rating = 사용자 i의 평균 평점
+    avg_rating = average_ratings(recom_user_name, movie_ratings_pivot)
+    
+    for i in recomm_movie_result:
+        #middle_rating = 사용자 보정 평점
+        try:
+            sigma_value = 0
+            sigma_value2 = 0
+            for j in sim_user_list['user']:
+                if movie_ratings_pivot.loc[i, j] == 0:
+                    continue
+
+                sim_uv = sim_user.loc[recom_user_name,j]
+                sigma_value = sigma_value + (sim_uv * (movie_ratings_pivot.loc[i,j] - average_ratings(j, movie_ratings_pivot)))
+                sigma_value2 = sigma_value2 + np.abs(sim_uv)
+            pred_ratings[i] = avg_rating + (sigma_value / sigma_value2)
+        except KeyError:
+            continue
+    
+    return pd.DataFrame([pred_ratings])
+
+# by 종두 협업필터링 기반 추천
+def recommend_movie_collabor(recom_user_name, sim_user, similarity_movie, movie_ratings_pivot):
+    recomm_movie_result = []
+
+    sim_user_li = sim_user_list(recom_user_name, sim_user)
+    for i in sim_user_li['user']:
+        #print(index,'번째:',user_movie_dict[i])
+        movie_list = user_movie_dict[i]
+        for j in movie_list:
+            first = similarity_movie[j].sort_values(ascending=False).index[1]
+            recomm_movie_result.append(first)
+    
+    pred_rating = collabor_pred_rating(recom_user_name, sim_user, sim_user_li, recomm_movie_result,movie_ratings_pivot)
+    return pred_rating
+    # DF 만들기 정렬 후 TOP10개를 추출
+
+    # return recomm_movie_result
+
+recom_user_name = input() #'CHAEYOOE'
+
+sim_user = movie_ratings_pivot.corr(method='pearson')
+result_collabor_movie = recommend_movie_collabor(recom_user_name, sim_user, similarity_movie, movie_ratings_pivot)
+collaborative_result = result_collabor_movie.T
+
+movie = collaborative_result.sort_values(by = 0, ascending=False)[:10].index
+score = collaborative_result.sort_values(by = 0, ascending=False)[:10].values
+result = collaborative_result.sort_values(by = 0, ascending=False)[:10]
+print(result)
+
+
+# # by 종두 협업필터링 기반 추천
+# def recommend_movie_collabor(recom_user_name, pear_sim, similarity):
+#     recomm_movie_result = []
+
+#     sim_user = sim_user_list(recom_user_name, pear_sim)
+
+#     for i in sim_user['user']:
+#         #print(index,'번째:',user_movie_dict[i])
+#         movie_list = user_movie_dict[i]
+#         for j in movie_list:
+#             first = similarity[j].sort_values(ascending=False).index[1]
+#             recomm_movie_result.append(first)
+            
+#     return recomm_movie_result
+
+
+
 
 # by 종두 특정 user의 평균 rating
 def average_ratings(recom_user_name, movie_ratings_pivot):
@@ -176,12 +267,8 @@ def contents_pred_rating(recom_user_name, movie_ratings_pivot, movie_ratings_piv
         #print(user['title'].drop_duplicates().iloc[j] , moviesaverage[0] + sum)  # 추천대상이 되는 사용자가 전체영화에 준 평균평점 + (추천영화를 본사람들이 추천 영화장르에 준 평균평점 - 추천영화에 준 평점)
         pred_m[movie_ratings['title'].drop_duplicates().iloc[j]]=avg_rating + sum  #데이터 프레임 열에 영화넣고 예측평점을 값으로 저장 
 
-    print(pred_m)
-
     return pred_m
 
-
-    
 
 # by 종두 협업필터링 예측 평점
 def collabor_pred_rating(recom_user_name, similarity_movie, pear_sim ,movie_ratings_pivot, movie_ratings_pivot_T):
@@ -202,85 +289,3 @@ def collabor_pred_rating(recom_user_name, similarity_movie, pear_sim ,movie_rati
         pred_ratings[i] = avg_rating + sigma_value
     
     return pd.DataFrame([pred_ratings])
-
-
-# by 종두 콘텐츠 기반 추천
-def recommend_movie_contents(recom_user_name, similarity):
-    interest_movie = user_movie_dict[recom_user_name]
-    recomm_movie_result = []
-
-    for i in interest_movie:
-        recomm_movie_result.append(similarity[i].sort_values(ascending=False).index[1])
-    
-    return recomm_movie_result
-
-# by 종두 유사 사용자 추출
-def sim_user_list(recom_user_name, pear_sim):
-    sim_user = pd.DataFrame()
-    sim_user['user'] = pear_sim[recom_user_name].index #sorted(pear_sim['CHAEYOOE'], reverse=True)
-    sim_user['rating'] = pear_sim[recom_user_name].values
-    sim_user = sim_user.sort_values(by='rating', ascending=False)[1:11].reset_index(drop=True)
-    return sim_user
-
-# by 종두 협업필터링 기반 추천
-def recommend_movie_collabor(recom_user_name, pear_sim, similarity):
-    recomm_movie_result = []
-
-    sim_user = sim_user_list(recom_user_name, pear_sim)
-
-    for i in sim_user['user']:
-        #print(index,'번째:',user_movie_dict[i])
-        movie_list = user_movie_dict[i]
-        for j in movie_list:
-            first = similarity[j].sort_values(ascending=False).index[1]
-            recomm_movie_result.append(first)
-
-    print(recommend_movie_contents(recom_user_name, similarity))
-    
-    return recomm_movie_result
-
-
-# by 종두 user input
-recom_user_name = 'CHAEYOOE' #input()
-
-# 10.13 issue
-# @@@recommend_movie_contents, recommend_movie_collabor 영화 갯수 지정 후 추천!!!!!!!
-
-# recom_user_name = 'CHAEYOOE'
-
-# def similarity_movie(recom_user_name, movie_title, similarity, contents):
-#     num = round(len(similarity.index) * 0.2)
-#     sim_movie = pd.DataFrame(similarity.loc[movie_title, :]).sort_values(by=movie_title, ascending=False)[1:num]
-#     pred_movie = sim_movie.index
-#     pred_rating = 0
-
-# chaeyooe 대상으로 했을 때, movie_title은 대상이 흥미있는 영화들이고, 그 영화와 비슷한 영화
-
-
-
-
-
-# @@@ 다른 사용자들이 특정 영화에 매긴 rating의 평균 점수 code
-# avg = []
-
-# for i in first.index:
-#     avg.append(np.mean(ratings[ratings['title'] == i]['rating']))
-
-# first['sim_user_rating'] = avg
-
-# movie_ratings_pivot_t = movie_ratings_pivot.T
-# movie_ratings_pivot_t
-
-# sim_user = movie_ratings_pivot_t[movie_ratings_pivot_t['유전'] > 0].index
-# pred = []
-# for i in sim_user:
-#     sim = pearson_sim.loc['CHAEYOOE', i]
-#     sco = movie_ratings_pivot_t.loc[i, '유전']
-#     aver = average(i)
-#     pred.append(sim*(sco-aver)/ sim)
-# middle_result = np.mean(pred)
-
-# CHAEYOOE_average = movie_ratings_pivot[movie_ratings_pivot['CHAEYOOE'] > 0]['CHAEYOOE']
-# CHAEYOOE_average = sum(CHAEYOOE_average) / len(CHAEYOOE_average)
-
-# CHAEYOOE_average + middle_result
