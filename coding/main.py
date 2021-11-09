@@ -39,6 +39,7 @@ def data_load(file_path):
 # by 종두 Data 불러오기
 ratings = data_load('data/ratings_3st.csv')
 movies = data_load('data/movies_info_new_genres3.csv')
+movies2 = data_load('movies_info_new_genres31.csv')
 
 def preprocessing(movies, ratings):
     movies = movies[movies['year'] > 2015]
@@ -147,7 +148,7 @@ keyword.fillna(0, inplace=True)
 similarity_movie = keyword.corr(method='pearson')
 similarity_movie
 
-# by 종두 콘텐츠 기반 추천
+# 선호 영화 추출
 def recommend_movie_contents(recom_user_name, similarity_movie):
     interest_movie = user_movie_dict[recom_user_name]
     recomm_movie_result = []
@@ -156,6 +157,40 @@ def recommend_movie_contents(recom_user_name, similarity_movie):
         recomm_movie_result.append(similarity_movie[i].sort_values(ascending=False).index[1])
     
     return recomm_movie_result
+
+# 콘텐츠 기반 예측 평점 후 데이터 추출
+def contents_pred_rating(recom_user_name, movie_ratings_pivot):
+    avg_rating = average_ratings(recom_user_name, movie_ratings_pivot)
+    
+    pred_m = pd.DataFrame(index=[recom_user_name])  #추천대상이 되는 사용자를 행으로하는 데이터 프레임 만들기
+
+    for j in range(10):  #len(user['title'].drop_duplicates()) 우선 행개수 10개  
+        test=movies2[movies2['title']==movies2['title'].drop_duplicates().iloc[j]] #예측평점을 만들고자 하는 영화를 차례대로 넣기
+
+        sum=0
+        for i in range(len(test)):
+            test2=movies2[movies2['user']==test.iloc[i]['user']] #특정영화를 본 사용자가 본 전체 영화 저장 
+
+
+            test3=test2[test2['new_genres']==test.iloc[i]['new_genres']]  #특정사용자가 본 전체 영화중에 특정 영화장르인 모든 영화
+            test3['rating'].mean() - test.iloc[i]['rating']  # 특정영화를 본 사용자가 특정영화의 장르에 준 평균평점 - 특정영화에 준 평점
+
+            sum = sum + (test.iloc[i]['rating'] - test3['rating'].mean())
+
+        sum = sum/len(test)
+        #print(user['title'].drop_duplicates().iloc[j] , moviesaverage[0] + sum)  # 추천대상이 되는 사용자가 전체영화에 준 평균평점 + (추천영화를 본사람들이 추천 영화장르에 준 평균평점 - 추천영화에 준 평점)
+        pred_m[movies2['title'].drop_duplicates().iloc[j]]=avg_rating + sum  #데이터 프레임 열에 영화넣고 예측평점을 값으로 저장 
+
+    pred_n = pd.DataFrame(index=[recom_user_name])
+
+    for i in range(len(recommend_movie_contents)):  # 예측평점을 구해야하는 recommend_movie_contents에 저장된 영화들에 대해서만 출력
+
+        pred_n.insert(i,recommend_movie_contents[i],pred_m[recommend_movie_contents[i]],True)  
+
+    # print(pred_n)  # 전체 데이터 사용하여 평가지표 실행
+    # print(pred_n.transpose().sort_index().head(5)) #추천데이터 5개 추출하여 평가지표 실행
+    return pred_n
+
 
 # by 종두 유사 사용자 추출
 def sim_user_list(recom_user_name, pear_sim):
@@ -244,30 +279,30 @@ def average_ratings(recom_user_name, movie_ratings_pivot):
     average = sum(average) / len(average)
     return average
 
-# 콘텐츠 기반 예측 평점
-def contents_pred_rating(recom_user_name, movie_ratings_pivot, movie_ratings_pivot_T):
-    avg_rating = average_ratings(recom_user_name, movie_ratings_pivot)
+# # 콘텐츠 기반 예측 평점
+# def contents_pred_rating(recom_user_name, movie_ratings_pivot, movie_ratings_pivot_T):
+#     avg_rating = average_ratings(recom_user_name, movie_ratings_pivot)
     
-    pred_m = pd.DataFrame(index=[recom_user_name])  #추천대상이 되는 사용자를 행으로하는 데이터 프레임 만들기
+#     pred_m = pd.DataFrame(index=[recom_user_name])  #추천대상이 되는 사용자를 행으로하는 데이터 프레임 만들기
 
-    for j in range(10):  #len(user['title'].drop_duplicates()) 우선 행개수 10개  
-        test=movie_ratings[movie_ratings['title']==movie_ratings['title'].drop_duplicates().iloc[j]] #예측평점을 만들고자 하는 영화를 차례대로 넣기
+#     for j in range(10):  #len(user['title'].drop_duplicates()) 우선 행개수 10개  
+#         test=movie_ratings[movie_ratings['title']==movie_ratings['title'].drop_duplicates().iloc[j]] #예측평점을 만들고자 하는 영화를 차례대로 넣기
 
-        sum=0
-        for i in range(len(test)):
-            test2=movie_ratings[movie_ratings['user']==test.iloc[i]['user']] #특정영화를 본 사용자가 본 전체 영화 저장 
+#         sum=0
+#         for i in range(len(test)):
+#             test2=movie_ratings[movie_ratings['user']==test.iloc[i]['user']] #특정영화를 본 사용자가 본 전체 영화 저장 
 
 
-            test3=test2[test2['new_genres']==test.iloc[i]['new_genres']]  #특정사용자가 본 전체 영화중에 특정 영화장르인 모든 영화
-            test3['rating'].mean() - test.iloc[i]['rating']  # 특정영화를 본 사용자가 특정영화의 장르에 준 평균평점 - 특정영화에 준 평점
+#             test3=test2[test2['new_genres']==test.iloc[i]['new_genres']]  #특정사용자가 본 전체 영화중에 특정 영화장르인 모든 영화
+#             test3['rating'].mean() - test.iloc[i]['rating']  # 특정영화를 본 사용자가 특정영화의 장르에 준 평균평점 - 특정영화에 준 평점
 
-            sum = sum + (test.iloc[i]['rating'] - test3['rating'].mean())
+#             sum = sum + (test.iloc[i]['rating'] - test3['rating'].mean())
 
-        sum = sum/len(test)
-        #print(user['title'].drop_duplicates().iloc[j] , moviesaverage[0] + sum)  # 추천대상이 되는 사용자가 전체영화에 준 평균평점 + (추천영화를 본사람들이 추천 영화장르에 준 평균평점 - 추천영화에 준 평점)
-        pred_m[movie_ratings['title'].drop_duplicates().iloc[j]]=avg_rating + sum  #데이터 프레임 열에 영화넣고 예측평점을 값으로 저장 
+#         sum = sum/len(test)
+#         #print(user['title'].drop_duplicates().iloc[j] , moviesaverage[0] + sum)  # 추천대상이 되는 사용자가 전체영화에 준 평균평점 + (추천영화를 본사람들이 추천 영화장르에 준 평균평점 - 추천영화에 준 평점)
+#         pred_m[movie_ratings['title'].drop_duplicates().iloc[j]]=avg_rating + sum  #데이터 프레임 열에 영화넣고 예측평점을 값으로 저장 
 
-    return pred_m
+#     return pred_m
 
 
 # by 종두 협업필터링 예측 평점
